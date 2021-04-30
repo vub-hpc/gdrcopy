@@ -69,7 +69,7 @@ Requires:       check
 %package devel
 Summary: The development files
 Group: System Environment/Libraries
-Requires: %{name} = %{version}-%{_release}
+Requires: %{name} = %{version}-%{_release}%{?dist}
 BuildArch: noarch
 
 %package %{kmod}
