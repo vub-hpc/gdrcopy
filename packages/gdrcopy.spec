@@ -11,10 +11,10 @@
 %define MODPROBE %(if ( /sbin/modprobe -c | grep -q '^allow_unsupported_modules  *0'); then echo -n "/sbin/modprobe --allow-unsupported-modules"; else echo -n "/sbin/modprobe"; fi )
 %define usr_src_dir /usr/src
 %define old_driver_install_dir /lib/modules/%{KVERSION}/%{MODULE_LOCATION}
-%global kmod kmod
+%global kmod kmod-dkms
 
 %if %{BUILD_KMOD_NONDKMS} > 0
-%global kmod_nondkms %{kmod}-%{KVERSION}-%{NVIDIA_DRIVER_VERSION}
+%global kmod_nondkms kmod
 %endif
 
 %global gdrdrv_install_script                                           \
