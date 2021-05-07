@@ -1,5 +1,4 @@
 %{!?_release: %define _release 1}
-%{!?CUDA: %define CUDA /usr/local/cuda}
 %{!?GDR_VERSION: %define GDR_VERSION 2.0}
 %{!?KVERSION: %define KVERSION %(uname -r)}
 %{!?MODULE_LOCATION: %define MODULE_LOCATION /kernel/drivers/misc/}
@@ -57,7 +56,7 @@ fi
 
 Name:           gdrcopy
 Version:        %{GDR_VERSION}
-Release:        %{_release}%{?dist}
+Release: 	%{krelver}.%{_release}%{?dist}
 Summary:        GDRcopy library and companion kernel-mode driver    
 Group:          System Environment/Libraries
 License:        MIT
@@ -77,7 +76,7 @@ Summary: The kernel-mode driver
 Group: System Environment/Libraries
 Requires: dkms >= 1.00
 Requires: bash
-Release: %{_release}%{?dist}dkms
+Release: %{NVIDIA_DRIVER_VERSION}.%{krelver}.%{_release}%{?dist}dkms
 BuildArch: noarch
 Provides: %{name}-%{kmod} = %{version}-%{_release}
 %if 0%{?rhel} >= 8
@@ -90,7 +89,7 @@ Recommends: kmod-nvidia-latest-dkms
 %package %{kmod_nondkms}
 Summary: The kernel-mode driver
 Group: System Environment/Libraries
-Release: %{_release}%{?dist}
+Release: %{NVIDIA_DRIVER_VERSION}.%{krelver}.%{_release}%{?dist}
 Provides: %{name}-%{kmod} = %{version}-%{_release}
 %endif
 
@@ -116,14 +115,14 @@ Kernel-mode driver for GDRCopy built for GPU driver %{NVIDIA_DRIVER_VERSION} and
 
 %build
 echo "building"
-make -j8 CUDA=%{CUDA} config lib exes
+make -j8 config lib
 %if %{BUILD_KMOD_NONDKMS} > 0
 make -j8 NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR} driver
 %endif
 
 %install
-# Install gdrcopy library and tests
-make install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix} libdir=%{_libdir}
+# Install gdrcopy library
+make lib_install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix} libdir=%{_libdir}
 
 %if %{BUILD_KMOD_NONDKMS} > 0
 # Install gdrdrv driver
@@ -244,9 +243,6 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %files
-%{_prefix}/bin/copybw
-%{_prefix}/bin/copylat
-%{_prefix}/bin/sanity
 %{_libdir}/libgdrapi.so.?.?
 %{_libdir}/libgdrapi.so.?
 %{_libdir}/libgdrapi.so
@@ -276,6 +272,10 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
+* Fri May 07 2021 Alex Domingo <alex.domingo.toro@vub.be> %{GDR_VERSION}-%{_release}
+- Remove package signing
+- Remove exes from gdrcopy and dependency on CUDA
+- Fix install step of non-dkms kmod
 * Mon Feb 01 2021 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
 - Add support for ARM64.
 - Update various information on README.
