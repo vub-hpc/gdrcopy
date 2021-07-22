@@ -143,7 +143,7 @@ cp -a $RPM_BUILD_DIR/%{name}-%{version}/dkms.conf $RPM_BUILD_ROOT%{usr_src_dir}/
 
 # Install gdrdrv service script
 install -d $RPM_BUILD_ROOT/etc/init.d
-install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT/etc/init.d
+install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/packages/rhel/init.d/gdrcopy $RPM_BUILD_ROOT/etc/init.d
 
 %post %{kmod}
 if [ "$1" == "2" ] && [ -e "%{old_driver_install_dir}/gdrdrv.ko" ]; then
