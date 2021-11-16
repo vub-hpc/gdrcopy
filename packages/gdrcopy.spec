@@ -1,7 +1,7 @@
 %{!?_release: %define _release 1}
 %{!?GDR_VERSION: %define GDR_VERSION 2.0}
 %{!?KVERSION: %define KVERSION %(uname -r)}
-%{!?MODULE_LOCATION: %define MODULE_LOCATION /kernel/drivers/misc/}
+%{!?MODULE_LOCATION: %define MODULE_LOCATION kernel/drivers/misc/}
 %{!?NVIDIA_DRIVER_VERSION: %define NVIDIA_DRIVER_VERSION UNKNOWN}
 %{!?NVIDIA_SRC_DIR: %define NVIDIA_SRC_DIR UNDEFINED}
 %{!?BUILD_KMOD: %define BUILD_KMOD 0}
@@ -16,7 +16,7 @@
 %define kmod_kernel_version %{KVERSION}
 
 %define kernel_version %{dkms_kernel_version}
-%define old_driver_install_dir /lib/modules/%{kernel_version}/%{MODULE_LOCATION}
+%define old_driver_install_dir /lib/modules/%{kernel_version}%{?dist}.%{_arch}/%{MODULE_LOCATION}
 
 # Use the same name scheme as for the Nvidia Drivers
 # KMOD package has 'kmod' as static name
@@ -64,7 +64,7 @@ fi
 
 Name:           gdrcopy
 Version:        %{GDR_VERSION}
-Release: 	%{krelver}.%{_release}%{?dist}
+Release: 	    %{_release}.%{krelver}%{?dist}
 Summary:        GDRcopy library and companion kernel-mode driver    
 Group:          System Environment/Libraries
 License:        MIT
@@ -85,7 +85,7 @@ Summary: The kernel-mode driver
 Group: System Environment/Libraries
 Requires: dkms >= 1.00
 Requires: bash
-Release: %{NVIDIA_DRIVER_VERSION}.%{krelver}.%{_release}%{?dist}dkms
+Release: %{krelver}.%{NVIDIA_DRIVER_VERSION}.%{krelver}%{?dist}dkms
 BuildArch: noarch
 Provides: %{name}-kmod = %{version}-%{_release}
 %if 0%{?rhel} >= 8
@@ -99,7 +99,7 @@ Recommends: kmod-nvidia-latest-dkms
 %package %{kmod_fullname}
 Summary: The kernel-mode driver
 Group: System Environment/Libraries
-Release: %{NVIDIA_DRIVER_VERSION}.%{krelver}.%{_release}%{?dist}
+Release: %{_release}.%{NVIDIA_DRIVER_VERSION}.%{krelver}%{?dist}
 Provides: %{name}-kmod = %{version}-%{_release}
 
 %endif
@@ -188,7 +188,7 @@ service gdrcopy stop||:
 %{MODPROBE} -rq gdrdrv||:
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
    true
-fi              
+fi
 
 # Remove all versions from DKMS registry
 echo "Uninstalling and removing the driver."
@@ -206,7 +206,7 @@ service gdrcopy stop||:
 %{MODPROBE} -rq gdrdrv||:
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
    true
-fi              
+fi
 
 %endif
 
@@ -303,6 +303,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 - Roll back name scheme to static package names
 - Disable DKMS module on KMOD builds
 - Remove (again) exes from gdrcopy and dependency on CUDA
+- Remove redundant particles from package release string
 * Fri Jul 23 2021 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
 - Remove automatically-generated build id links.
 - Remove gdrcopy-kmod from the Requires field.
