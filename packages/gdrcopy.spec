@@ -18,8 +18,12 @@
 %define kernel_version %{dkms_kernel_version}
 %define old_driver_install_dir /lib/modules/%{kernel_version}/%{MODULE_LOCATION}
 
-# This is to set the dkms package name. For backward compatibility with the previous versions, we need to keep using "kmod".
-%global dkms kmod
+# Use the same name scheme as for the Nvidia Drivers
+# KMOD package has 'kmod' as static name
+%global kmod_fullname kmod
+# DKMS package has an extra 'dkms' suffix
+%global dkms %{kmod_fullname}-dkms
+
 
 %define gdrdrv_install_script                                           \
 /sbin/depmod -a %{kernel_version} &> /dev/null ||:                      \
@@ -94,7 +98,7 @@ Recommends: kmod-nvidia-latest-dkms
 
 %else
 # This is the real kmod package, which contains prebuilt gdrdrv.ko.
-%package %{kmod}
+%package %{kmod_fullname}
 Summary: The kernel-mode driver
 Group: System Environment/Libraries
 Release: %{NVIDIA_DRIVER_VERSION}.%{krelver}.%{_release}%{?dist}
@@ -115,7 +119,7 @@ NVIDIA GPUDirect RDMA technology.
 %description %{dkms}
 Kernel-mode driver for GDRCopy with DKMS support.
 %else
-%description %{kmod}
+%description %{kmod_fullname}
 Kernel-mode driver for GDRCopy built for GPU driver %{NVIDIA_DRIVER_VERSION} and Linux kernel %{KVERSION}.
 %endif
 
@@ -173,7 +177,7 @@ if [ ! -e "%{_localstatedir}/lib/rpm-state/gdrcopy-dkms/installed" ]; then
 fi
 
 %else
-%post %{kmod}
+%post %{kmod_fullname}
 %define kernel_version %{kmod_kernel_version}
 %{gdrdrv_install_script}
 
@@ -199,7 +203,7 @@ find /lib/modules/*/weak-updates -name "gdrdrv.ko.*" -delete &> /dev/null || :
 find /lib/modules/*/weak-updates -name "gdrdrv.ko" -delete &> /dev/null || :
 
 %else
-%preun %{kmod}
+%preun %{kmod_fullname}
 service gdrcopy stop||:
 %{MODPROBE} -rq gdrdrv||:
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
@@ -244,7 +248,7 @@ if [ -e "%{_localstatedir}/lib/rpm-state/gdrcopy-dkms/installed" ]; then
 fi
 
 %else
-%postun %{kmod}
+%postun %{kmod_fullname}
 %{daemon_reload_script}
 
 %endif
@@ -281,7 +285,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %{usr_src_dir}/gdrdrv-%{version}/dkms.conf
 
 %else
-%files %{kmod}
+%files %{kmod_fullname}
 %defattr(-,root,root,-)
 /etc/init.d/gdrcopy
 %{old_driver_install_dir}/gdrdrv.ko
@@ -291,6 +295,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %changelog
 * Tue Nov 16 2021 Alex Domingo <alex.domingo.toro@vub.be> 2.3-0
+- Roll back name scheme to static package names
 - Disable DKMS module on KMOD builds
 * Fri Jul 23 2021 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
 - Remove automatically-generated build id links.
