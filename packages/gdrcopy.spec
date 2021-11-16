@@ -61,8 +61,6 @@ if [ -e /usr/bin/systemctl ]; then                                      \
     /usr/bin/systemctl daemon-reload                                    \
 fi
 
-%global __requires_exclude ^libcuda\\.so.*$
-
 
 Name:           gdrcopy
 Version:        %{GDR_VERSION}
@@ -128,7 +126,7 @@ Kernel-mode driver for GDRCopy built for GPU driver %{NVIDIA_DRIVER_VERSION} and
 
 %build
 echo "building"
-make -j8 CUDA=%{CUDA} config lib exes
+make -j8 config lib
 %if %{BUILD_KMOD} > 0
 make -j8 NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR} driver
 %endif
@@ -260,10 +258,11 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %files
-%{_prefix}/bin/apiperf
-%{_prefix}/bin/copybw
-%{_prefix}/bin/copylat
-%{_prefix}/bin/sanity
+# Executables are disabled
+# %{_prefix}/bin/apiperf
+# %{_prefix}/bin/copybw
+# %{_prefix}/bin/copylat
+# %{_prefix}/bin/sanity
 %{_libdir}/libgdrapi.so.?.?
 %{_libdir}/libgdrapi.so.?
 %{_libdir}/libgdrapi.so
@@ -282,12 +281,18 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %{usr_src_dir}/gdrdrv-%{version}/gdrdrv.h
 %{usr_src_dir}/gdrdrv-%{version}/Makefile
 %{usr_src_dir}/gdrdrv-%{version}/nv-p2p-dummy.c
+
 %{usr_src_dir}/gdrdrv-%{version}/dkms.conf
 
 %else
 %files %{kmod_fullname}
 %defattr(-,root,root,-)
 /etc/init.d/gdrcopy
+%{usr_src_dir}/gdrdrv-%{version}/gdrdrv.c
+%{usr_src_dir}/gdrdrv-%{version}/gdrdrv.h
+%{usr_src_dir}/gdrdrv-%{version}/Makefile
+%{usr_src_dir}/gdrdrv-%{version}/nv-p2p-dummy.c
+
 %{old_driver_install_dir}/gdrdrv.ko
 
 %endif
@@ -297,13 +302,14 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 * Tue Nov 16 2021 Alex Domingo <alex.domingo.toro@vub.be> 2.3-0
 - Roll back name scheme to static package names
 - Disable DKMS module on KMOD builds
+- Remove (again) exes from gdrcopy and dependency on CUDA
 * Fri Jul 23 2021 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
 - Remove automatically-generated build id links.
 - Remove gdrcopy-kmod from the Requires field.
 - Add apiperf test.
 - Various updates in README.
 - Revamp gdrdrv to fix race-condition bugs.
-* Fri May 07 2021 Alex Domingo <alex.domingo.toro@vub.be> 2.2-1
+* Fri May 07 2021 Alex Domingo <alex.domingo.toro@vub.be> %{GDR_VERSION}-%{_release}
 - Remove package signing
 - Remove exes from gdrcopy and dependency on CUDA
 - Fix install step of non-dkms kmod
