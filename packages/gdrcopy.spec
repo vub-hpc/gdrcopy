@@ -135,11 +135,7 @@ make -j8 NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR} driver
 # Install gdrcopy library
 make lib_install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix} libdir=%{_libdir}
 
-%if %{BUILD_KMOD} > 0
-# Install gdrdrv driver
-make drv_install DESTDIR=$RPM_BUILD_ROOT NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR}
-%endif
-
+%if %{BUILD_KMOD} == 0
 # Install gdrdrv src
 mkdir -p $RPM_BUILD_ROOT%{usr_src_dir}
 mkdir -p $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
@@ -147,9 +143,13 @@ cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/gdrdrv.c $RPM_BUILD_ROOT%{usr
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/gdrdrv.h $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/Makefile $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/nv-p2p-dummy.c $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
-
-%if %{BUILD_KMOD} == 0
+# Install gdrdrv DKMS driver
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/dkms.conf $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
+
+%else
+# Install gdrdrv KMOD driver
+make drv_install DESTDIR=$RPM_BUILD_ROOT NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR}
+
 %endif
 
 # Install gdrdrv service script
@@ -288,11 +288,6 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %files %{kmod_fullname}
 %defattr(-,root,root,-)
 /etc/init.d/gdrcopy
-%{usr_src_dir}/gdrdrv-%{version}/gdrdrv.c
-%{usr_src_dir}/gdrdrv-%{version}/gdrdrv.h
-%{usr_src_dir}/gdrdrv-%{version}/Makefile
-%{usr_src_dir}/gdrdrv-%{version}/nv-p2p-dummy.c
-
 %{old_driver_install_dir}/gdrdrv.ko
 
 %endif
@@ -304,13 +299,14 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 - Disable DKMS module on KMOD builds
 - Remove (again) exes from gdrcopy and dependency on CUDA
 - Remove redundant particles from package release string
+- Limit source files installation to DKMS module
 * Fri Jul 23 2021 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
 - Remove automatically-generated build id links.
 - Remove gdrcopy-kmod from the Requires field.
 - Add apiperf test.
 - Various updates in README.
 - Revamp gdrdrv to fix race-condition bugs.
-* Fri May 07 2021 Alex Domingo <alex.domingo.toro@vub.be> %{GDR_VERSION}-%{_release}
+* Fri May 07 2021 Alex Domingo <alex.domingo.toro@vub.be> 2.2-1
 - Remove package signing
 - Remove exes from gdrcopy and dependency on CUDA
 - Fix install step of non-dkms kmod
