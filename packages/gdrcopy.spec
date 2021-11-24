@@ -148,11 +148,11 @@ cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/gdrdrv.c $RPM_BUILD_ROOT%{usr
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/gdrdrv.h $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/Makefile $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/nv-p2p-dummy.c $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
-cp -a $RPM_BUILD_DIR/%{name}-%{version}/dkms.conf $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
+cp -a $RPM_BUILD_DIR/%{name}-%{version}/packages/dkms.conf $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
 
 # Install gdrdrv service script
 install -d $RPM_BUILD_ROOT/etc/init.d
-install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT/etc/init.d
+install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/packages/rhel/init.d/gdrcopy $RPM_BUILD_ROOT/etc/init.d
 
 %post %{dkms}
 if [ "$1" == "2" ] && [ -e "%{old_driver_install_dir}/gdrdrv.ko" ]; then
@@ -290,6 +290,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %changelog
 * Tue Nov 16 2021 Alex Domingo <alex.domingo.toro@vub.be> 2.3-0
+- Fix paths to package source file
 - Disable (again) exes from gdrcopy to remove dependency on CUDA
 * Fri Jul 23 2021 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
 - Remove automatically-generated build id links.
