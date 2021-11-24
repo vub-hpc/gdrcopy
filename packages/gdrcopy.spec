@@ -127,14 +127,14 @@ Kernel-mode driver for GDRCopy built for GPU driver %{NVIDIA_DRIVER_VERSION} and
 
 %build
 echo "building"
-make -j8 CUDA=%{CUDA} config lib exes
+make -j8 config lib
 %if %{BUILD_KMOD} > 0
 make -j8 NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR} driver
 %endif
 
 %install
-# Install gdrcopy library and tests
-make install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix} libdir=%{_libdir}
+# Install gdrcopy library
+make lib_install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix} libdir=%{_libdir}
 
 %if %{BUILD_KMOD} > 0
 # Install gdrdrv driver
@@ -256,10 +256,10 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %files
-%{_prefix}/bin/apiperf
-%{_prefix}/bin/copybw
-%{_prefix}/bin/copylat
-%{_prefix}/bin/sanity
+#%{_prefix}/bin/apiperf
+#%{_prefix}/bin/copybw
+#%{_prefix}/bin/copylat
+#%{_prefix}/bin/sanity
 %{_libdir}/libgdrapi.so.?.?
 %{_libdir}/libgdrapi.so.?
 %{_libdir}/libgdrapi.so
@@ -289,6 +289,8 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
+* Tue Nov 16 2021 Alex Domingo <alex.domingo.toro@vub.be> 2.3-0
+- Disable (again) exes from gdrcopy to remove dependency on CUDA
 * Fri Jul 23 2021 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
 - Remove automatically-generated build id links.
 - Remove gdrcopy-kmod from the Requires field.
