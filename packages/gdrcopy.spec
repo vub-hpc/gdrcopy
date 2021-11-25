@@ -79,7 +79,7 @@ Requires:       check
 %package devel
 Summary: The development files
 Group: System Environment/Libraries
-Requires: %{name} = %{version}-%{_release}
+Requires: %{name} = %{version}-%{_release}%{?dist}
 BuildArch: noarch
 
 %package %{dkms}
@@ -290,6 +290,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %changelog
 * Tue Nov 16 2021 Alex Domingo <alex.domingo.toro@vub.be> 2.3-0
+- Fix requires for gdrcopy-devel
 - Fix paths to kernel modules
 - Fix paths to package source file
 - Disable (again) exes from gdrcopy to remove dependency on CUDA
