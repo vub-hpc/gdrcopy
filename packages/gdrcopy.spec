@@ -2,7 +2,7 @@
 %{!?CUDA: %define CUDA /usr/local/cuda}
 %{!?GDR_VERSION: %define GDR_VERSION 2.0}
 %{!?KVERSION: %define KVERSION %(uname -r)}
-%{!?MODULE_LOCATION: %define MODULE_LOCATION kernel/drivers/misc/}
+%{!?MODULE_LOCATION: %define MODULE_LOCATION /kernel/drivers/misc/}
 %{!?NVIDIA_DRIVER_VERSION: %define NVIDIA_DRIVER_VERSION UNKNOWN}
 %{!?NVIDIA_SRC_DIR: %define NVIDIA_SRC_DIR UNDEFINED}
 %{!?BUILD_KMOD: %define BUILD_KMOD 0}
@@ -17,7 +17,7 @@
 %define kmod_kernel_version %{KVERSION}
 
 %define kernel_version %{dkms_kernel_version}
-%define old_driver_install_dir /lib/modules/%{kernel_version}%{?dist}.%{_arch}/%{MODULE_LOCATION}
+%define old_driver_install_dir /lib/modules/%{kernel_version}/%{MODULE_LOCATION}
 
 # This is to set the dkms package name. For backward compatibility with the previous versions, we need to keep using "kmod".
 %global dkms kmod
@@ -27,7 +27,7 @@
 %endif
 
 %define gdrdrv_install_script                                           \
-/sbin/depmod -a %{kernel_version}%{?dist}.%{_arch} &> /dev/null ||:                      \
+/sbin/depmod -a %{kernel_version} &> /dev/null ||:                      \
 %{MODPROBE} -rq gdrdrv||:                                               \
 %{MODPROBE} gdrdrv||:                                                   \
                                                                         \
@@ -290,7 +290,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %changelog
 * Fri Dec 03 2021 Alex Domingo <alex.domingo.toro@vub.be> 2.3-0
-- Add suffixes to kernel version of depmod
+- Undo our customizations to the kernel version
 * Tue Nov 16 2021 Alex Domingo <alex.domingo.toro@vub.be> 2.3-0
 - Fix requires for gdrcopy-devel
 - Fix paths to package source file
