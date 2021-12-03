@@ -27,7 +27,7 @@
 %endif
 
 %define gdrdrv_install_script                                           \
-/sbin/depmod -a %{kernel_version} &> /dev/null ||:                      \
+/sbin/depmod -a %{kernel_version}%{?dist}.%{_arch} &> /dev/null ||:                      \
 %{MODPROBE} -rq gdrdrv||:                                               \
 %{MODPROBE} gdrdrv||:                                                   \
                                                                         \
@@ -289,10 +289,12 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
+* Fri Dec 03 2021 Alex Domingo <alex.domingo.toro@vub.be> 2.3-0
+- Add suffixes to kernel version of depmod
 * Tue Nov 16 2021 Alex Domingo <alex.domingo.toro@vub.be> 2.3-0
 - Fix requires for gdrcopy-devel
-- Fix paths to kernel modules
 - Fix paths to package source file
+- Add suffixes to kernel version in old_driver_install_dir path
 - Disable (again) exes from gdrcopy to remove dependency on CUDA
 * Fri Jul 23 2021 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
 - Remove automatically-generated build id links.
