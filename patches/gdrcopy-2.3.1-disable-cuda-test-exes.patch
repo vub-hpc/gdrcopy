@@ -1,0 +1,105 @@
+Disable building test executables on RPM build script and spec file to remove requirement on CUDA
+author: Alex Domingo (Vrije Universiteit Brussel)
+diff --git a/packages/build-rpm-packages.sh b/packages/build-rpm-packages.sh
+index 386012c..24d4efe 100755
+--- a/packages/build-rpm-packages.sh
++++ b/packages/build-rpm-packages.sh
+@@ -74,16 +74,6 @@ done
+ 
+ shift $((OPTIND-1))
+ 
+-NVCC=${CUDA}/bin/nvcc
+-CUDA_VERSION=`$NVCC --version | grep release | sed 's/^.*release \([0-9]\+\.[0-9]\+\).*/\1/'`
+-CUDA_MAJOR=`echo ${CUDA_VERSION} | cut -d "." -f 1`
+-CUDA_MINOR=`echo ${CUDA_VERSION} | cut -d "." -f 2`
+-
+-if [ "X$CUDA" == "X" ]; then
+-    echo "CUDA environment variable is not defined"
+-    exit 1
+-fi
+-
+ echo "Building rpm package ..."
+ 
+ ex cd ${SCRIPT_DIR_PATH}
+@@ -147,7 +137,7 @@ ex mkdir -p $tmpdir/topdir/{SRPMS,RPMS,SPECS,BUILD,SOURCES}
+ ex cp gdrcopy-$VERSION/gdrcopy.spec $tmpdir/topdir/SPECS/
+ ex cp gdrcopy-$VERSION.tar.gz $tmpdir/topdir/SOURCES/
+ 
+-rpmbuild_params="-ba --nodeps --define '_build_id_links none' --define \"_topdir $tmpdir/topdir\" --define \"_release ${RPM_VERSION}\" --define 'dist %{nil}' --define \"CUDA $CUDA\" --define \"GDR_VERSION ${VERSION}\" --define \"KVERSION $(uname -r)\" --define \"MODULE_LOCATION ${MODULE_SUBDIR}\""
++rpmbuild_params="-ba --nodeps --define '_build_id_links none' --define \"_topdir $tmpdir/topdir\" --define \"_release ${RPM_VERSION}\" --define 'dist %{nil}' --define \"GDR_VERSION ${VERSION}\" --define \"KVERSION $(uname -r)\" --define \"MODULE_LOCATION ${MODULE_SUBDIR}\""
+ if [[ ${generate_kmod} == 1 ]]; then
+     rpmbuild_params="${rpmbuild_params} --define \"NVIDIA_DRIVER_VERSION ${NVIDIA_DRIVER_VERSION}\" --define \"NVIDIA_SRC_DIR ${NVIDIA_SRC_DIR}\" --define \"BUILD_KMOD 1\""
+ fi
+@@ -171,11 +161,7 @@ for item in `ls $tmpdir/topdir/SRPMS/*.rpm $tmpdir/topdir/RPMS/*/*.rpm`; do
+     item_name=`basename $item .rpm`
+     arch=$(sed -ne 's/.*\(\.[^\.]\+\)$/\1/p' <<< $item_name)
+     item_name=`basename $item_name $arch`
+-    if [ "$item_name" == "gdrcopy-${FULL_VERSION}-${RPM_VERSION}.`uname -m`" ]; then
+-        item_name="${item_name}${release_version}+cuda${CUDA_MAJOR}.${CUDA_MINOR}.${arch}.rpm"
+-    else
+-        item_name="${item_name}${release_version}${arch}.rpm"
+-    fi
++    item_name="${item_name}${release_version}${arch}.rpm"
+     ex cp $item ./${item_name}
+ done
+ 
+diff --git a/packages/gdrcopy.spec b/packages/gdrcopy.spec
+index 4d03aa1..8ef6d1b 100644
+--- a/packages/gdrcopy.spec
++++ b/packages/gdrcopy.spec
+@@ -1,5 +1,4 @@
+ %{!?_release: %define _release 1}
+-%{!?CUDA: %define CUDA /usr/local/cuda}
+ %{!?GDR_VERSION: %define GDR_VERSION 2.0}
+ %{!?KVERSION: %define KVERSION %(uname -r)}
+ %{!?MODULE_LOCATION: %define MODULE_LOCATION /kernel/drivers/misc/}
+@@ -127,14 +126,14 @@ Kernel-mode driver for GDRCopy built for GPU driver %{NVIDIA_DRIVER_VERSION} and
+ 
+ %build
+ echo "building"
+-make -j8 CUDA=%{CUDA} config lib exes
++make -j8 config lib
+ %if %{BUILD_KMOD} > 0
+ make -j8 NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR} driver
+ %endif
+ 
+ %install
+-# Install gdrcopy library and tests
+-make install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix} libdir=%{_libdir}
++# Install gdrcopy library
++make lib_install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix} libdir=%{_libdir}
+ 
+ %if %{BUILD_KMOD} > 0
+ # Install gdrdrv driver
+@@ -267,15 +266,6 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
+ 
+ 
+ %files
+-%{_prefix}/bin/apiperf
+-%{_prefix}/bin/copybw
+-%{_prefix}/bin/copylat
+-%{_prefix}/bin/sanity
+-%{_prefix}/bin/gdrcopy_apiperf
+-%{_prefix}/bin/gdrcopy_copybw
+-%{_prefix}/bin/gdrcopy_copylat
+-%{_prefix}/bin/gdrcopy_sanity
+-%{_prefix}/bin/gdrcopy_pplat
+ %{_libdir}/libgdrapi.so.?.?
+ %{_libdir}/libgdrapi.so.?
+ %{_libdir}/libgdrapi.so
+@@ -314,6 +304,15 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
+ 
+ 
+ %changelog
++* Mon Sep 18 2023 Alex Domingo <alex.domingo.toro@vub.be> 2.3.1-0
++- Sync with upstream master and reduce our patches to just disable CUDA
++* Fri Dec 03 2021 Alex Domingo <alex.domingo.toro@vub.be> 2.3-0
++- Undo our customizations to the kernel version
++* Tue Nov 16 2021 Alex Domingo <alex.domingo.toro@vub.be> 2.3-0
++- Fix requires for gdrcopy-devel
++- Fix paths to package source file
++- Add suffixes to kernel version in old_driver_install_dir path
++- Disable (again) exes from gdrcopy to remove dependency on CUDA
+ * Fri Jul 23 2021 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
+ - Remove automatically-generated build id links.
+ - Remove gdrcopy-kmod from the Requires field.
