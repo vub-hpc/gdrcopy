@@ -1,5 +1,4 @@
 %{!?_release: %define _release 1}
-%{!?CUDA: %define CUDA /usr/local/cuda}
 %{!?GDR_VERSION: %define GDR_VERSION 2.0}
 %{!?KVERSION: %define KVERSION %(uname -r)}
 %{!?MODULE_LOCATION: %define MODULE_LOCATION /kernel/drivers/misc/}
@@ -79,7 +78,7 @@ Requires:       check
 %package devel
 Summary: The development files
 Group: System Environment/Libraries
-Requires: %{name} = %{version}-%{_release}%{?dist}
+Requires: %{name} = %{version}-%{_release}
 BuildArch: noarch
 
 %package %{dkms}
@@ -148,7 +147,7 @@ cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/gdrdrv.c $RPM_BUILD_ROOT%{usr
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/gdrdrv.h $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/Makefile $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/nv-p2p-dummy.c $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
-cp -a $RPM_BUILD_DIR/%{name}-%{version}/packages/dkms.conf $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
+cp -a $RPM_BUILD_DIR/%{name}-%{version}/dkms.conf $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
 
 %if 0%{!?suse_version:1}
 # Install gdrdrv service script
@@ -267,15 +266,6 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %files
-%{_prefix}/bin/apiperf
-%{_prefix}/bin/copybw
-%{_prefix}/bin/copylat
-%{_prefix}/bin/sanity
-%{_prefix}/bin/gdrcopy_apiperf
-%{_prefix}/bin/gdrcopy_copybw
-%{_prefix}/bin/gdrcopy_copylat
-%{_prefix}/bin/gdrcopy_sanity
-%{_prefix}/bin/gdrcopy_pplat
 %{_libdir}/libgdrapi.so.?.?
 %{_libdir}/libgdrapi.so.?
 %{_libdir}/libgdrapi.so
@@ -314,6 +304,8 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
+* Mon Sep 18 2023 Alex Domingo <alex.domingo.toro@vub.be> 2.3.1-0
+- Sync with upstream master and reduce our patches to just disable CUDA
 * Fri Dec 03 2021 Alex Domingo <alex.domingo.toro@vub.be> 2.3-0
 - Undo our customizations to the kernel version
 * Tue Nov 16 2021 Alex Domingo <alex.domingo.toro@vub.be> 2.3-0

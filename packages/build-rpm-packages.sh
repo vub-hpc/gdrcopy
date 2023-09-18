@@ -74,16 +74,6 @@ done
 
 shift $((OPTIND-1))
 
-NVCC=${CUDA}/bin/nvcc
-CUDA_VERSION=`$NVCC --version | grep release | sed 's/^.*release \([0-9]\+\.[0-9]\+\).*/\1/'`
-CUDA_MAJOR=`echo ${CUDA_VERSION} | cut -d "." -f 1`
-CUDA_MINOR=`echo ${CUDA_VERSION} | cut -d "." -f 2`
-
-if [ "X$CUDA" == "X" ]; then
-    echo "CUDA environment variable is not defined"
-    exit 1
-fi
-
 echo "Building rpm package ..."
 
 ex cd ${SCRIPT_DIR_PATH}
@@ -147,14 +137,12 @@ ex mkdir -p $tmpdir/topdir/{SRPMS,RPMS,SPECS,BUILD,SOURCES}
 ex cp gdrcopy-$VERSION/gdrcopy.spec $tmpdir/topdir/SPECS/
 ex cp gdrcopy-$VERSION.tar.gz $tmpdir/topdir/SOURCES/
 
-rpmbuild_params="-ba --nodeps --define '_build_id_links none' --define \"_topdir $tmpdir/topdir\" --define \"_release ${RPM_VERSION}\" --define 'dist %{nil}' --define \"CUDA $CUDA\" --define \"GDR_VERSION ${VERSION}\" --define \"KVERSION $(uname -r)\" --define \"MODULE_LOCATION ${MODULE_SUBDIR}\""
+rpmbuild_params="-ba --nodeps --define '_build_id_links none' --define \"_topdir $tmpdir/topdir\" --define \"_release ${RPM_VERSION}\" --define 'dist %{nil}' --define \"GDR_VERSION ${VERSION}\" --define \"KVERSION $(uname -r)\" --define \"MODULE_LOCATION ${MODULE_SUBDIR}\""
 if [[ ${generate_kmod} == 1 ]]; then
     rpmbuild_params="${rpmbuild_params} --define \"NVIDIA_DRIVER_VERSION ${NVIDIA_DRIVER_VERSION}\" --define \"NVIDIA_SRC_DIR ${NVIDIA_SRC_DIR}\" --define \"BUILD_KMOD 1\""
 fi
 rpmbuild_params="${rpmbuild_params} $tmpdir/topdir/SPECS/gdrcopy.spec"
 eval "rpmbuild ${rpmbuild_params}"
-
-#rpmbuild -ba --nodeps --define '_build_id_links none' --define "_topdir $tmpdir/topdir" --define "_release ${RPM_VERSION}" --define 'dist %{nil}' --define "CUDA $CUDA" --define "GDR_VERSION ${VERSION}" --define "KVERSION $(uname -r)" --define "MODULE_LOCATION ${MODULE_SUBDIR}" --define "NVIDIA_DRIVER_VERSION ${NVIDIA_DRIVER_VERSION}" --define "NVIDIA_SRC_DIR ${NVIDIA_SRC_DIR}" $tmpdir/topdir/SPECS/gdrcopy.spec
 
 rpms=`ls -1 $tmpdir/topdir/RPMS/*/*.rpm`
 srpm=`ls -1 $tmpdir/topdir/SRPMS/`
@@ -173,11 +161,7 @@ for item in `ls $tmpdir/topdir/SRPMS/*.rpm $tmpdir/topdir/RPMS/*/*.rpm`; do
     item_name=`basename $item .rpm`
     arch=$(sed -ne 's/.*\(\.[^\.]\+\)$/\1/p' <<< $item_name)
     item_name=`basename $item_name $arch`
-    if [ "$item_name" == "gdrcopy-${FULL_VERSION}-${RPM_VERSION}.`uname -m`" ]; then
-        item_name="${item_name}${release_version}+cuda${CUDA_MAJOR}.${CUDA_MINOR}.${arch}.rpm"
-    else
-        item_name="${item_name}${release_version}${arch}.rpm"
-    fi
+    item_name="${item_name}${release_version}${arch}.rpm"
     ex cp $item ./${item_name}
 done
 
