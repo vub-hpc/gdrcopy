@@ -3,6 +3,11 @@
 A low-latency GPU memory copy library based on NVIDIA GPUDirect RDMA
 technology.
 
+## VUB-HPC fork
+
+:warning: This fork of Nvidia/gdrcopy has the build of test executables
+disabled for the RPM packages. The purpose of this change is to remove all
+requirements on the CUDA runtime.
 
 ## Introduction
 
