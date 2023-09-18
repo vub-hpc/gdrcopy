@@ -35,9 +35,11 @@ A simple by-product of it is a copy library with the following characteristics:
   PCIE
 
 The library comes with a few tests like:
-- sanity, which contains unit tests for the library and the driver.
-- copybw, a minimal application which calculates the R/W bandwidth for a specific buffer size.
-- copylat, a benchmark application which calculates the R/W copy latency for a range of buffer sizes.
+- gdrcopy_sanity, which contains unit tests for the library and the driver.
+- gdrcopy_copybw, a minimal application which calculates the R/W bandwidth for a specific buffer size.
+- gdrcopy_copylat, a benchmark application which calculates the R/W copy latency for a range of buffer sizes.
+- gdrcopy_apiperf, an application for benchmarking the latency of each GDRCopy API call.
+- gdrcopy_pplat, a benchmark application which calculates the round-trip ping-pong latency between GPU and CPU.
 
 ## Requirements
 
@@ -48,10 +50,11 @@ please refer to the official GPUDirect RDMA [design
 document](http://docs.nvidia.com/cuda/gpudirect-rdma).
 
 The device driver requires GPU display driver >= 418.40 on ppc64le and >= 331.14 on other platforms. The library and tests
-require CUDA >= 6.0. Additionally, the _sanity_ test requires check >= 0.9.8 and
+require CUDA >= 6.0. Additionally, the `gdrcopy_sanity` test requires check >= 0.9.8 and
 subunit.
 
-DKMS is a prerequisite for installing GDRCopy kernel module package. On RHEL,
+DKMS is a prerequisite for installing GDRCopy kernel module package. On RHEL
+or SLE,
 however, users have an option to build kmod and install it instead of the DKMS
 package. See [Build and installation](#build-and-installation) section for more details.
 
@@ -62,6 +65,10 @@ $ sudo yum install dkms check check-devel subunit subunit-devel
 
 # On Debian
 $ sudo apt install check libsubunit0 libsubunit-dev
+
+# On SLE / Leap
+# On SLE dkms can be installed from PackageHub.
+$ sudo zypper install dkms check-devel rpmbuild
 ```
 
 CUDA and GPU display driver must be installed before building and/or installing GDRCopy.
@@ -72,9 +79,11 @@ of the driver (or CUDA) installation with  *runfile*. If you install the driver
 via package management, we suggest
 - On RHEL, `sudo dnf module install nvidia-driver:latest-dkms`.
 - On Debian, `sudo apt install nvidia-dkms-<your-nvidia-driver-version>`.
+- On SLE, `sudo zypper install nvidia-gfx<your-nvidia-driver-version>-kmp`.
 
 The supported architectures are Linux x86_64, ppc64le, and arm64. The supported
-platforms are RHEL7, RHEL8, Ubuntu16_04, Ubuntu18_04, and Ubuntu20_04.
+platforms are RHEL7, RHEL8, Ubuntu16_04, Ubuntu18_04, Ubuntu20_04,
+SLE-15 (any SP) and Leap 15.x.
 
 Root privileges are necessary to load/install the kernel-mode device
 driver.
@@ -87,8 +96,13 @@ We provide three ways for building and installing GDRCopy.
 ### rpm package
 
 ```shell
+# For RHEL:
 $ sudo yum groupinstall 'Development Tools'
 $ sudo yum install dkms rpm-build make check check-devel subunit subunit-devel
+
+# For SLE:
+$ sudo zypper in dkms rpmbuild check-devel
+
 $ cd packages
 $ CUDA=<cuda-install-top-dir> ./build-rpm-packages.sh
 $ sudo rpm -Uvh gdrcopy-kmod-<version>dkms.noarch.<platform>.rpm
@@ -133,12 +147,12 @@ $ PKG_CONFIG_PATH=/check_install_path/lib/pkgconfig/ make <...>
 
 Execute provided tests:
 ```shell
-$ sanity 
+$ gdrcopy_sanity
 Running suite(s): Sanity
 100%: Checks: 27, Failures: 0, Errors: 0
 
 
-$ copybw
+$ gdrcopy_copybw
 GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
 GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
 GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
@@ -169,7 +183,7 @@ unpinning buffer
 closing gdrdrv
 
 
-$ copylat
+$ gdrcopy_copylat
 GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
 GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
 GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
@@ -254,7 +268,7 @@ unpinning buffer
 closing gdrdrv
 
 
-$ apiperf -s 8
+$ gdrcopy_apiperf -s 8
 GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
 GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
 GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
@@ -282,6 +296,28 @@ Histogram of gdr_pin_buffer latency for 65536 bytes
 [13038.520000   -   14342.372000]   2
 
 closing gdrdrv
+
+
+
+$ numactl -N 1 -l gdrcopy_pplat
+GPU id:0; name: NVIDIA A40; Bus id: 0000:09:00
+selecting device 0
+device ptr: 0x7f99d2600000
+gpu alloc fn: cuMemAlloc
+map_d_ptr: 0x7f9a054fb000
+info.va: 7f99d2600000
+info.mapped_size: 4
+info.page_size: 65536
+info.mapped: 1
+info.wc_mapping: 1
+page offset: 0
+user-space pointer: 0x7f9a054fb000
+CPU does gdr_copy_to_mapping and GPU writes back via cuMemHostAlloc'd buffer.
+Running 1000 iterations with data size 4 bytes.
+Round-trip latency per iteration is 1.08762 us
+unmapping buffer
+unpinning buffer
+closing gdrdrv
 ```
 
 ## NUMA effects
@@ -296,7 +332,7 @@ CPU socket 0. By explicitly playing with the OS process and memory
 affinity, it is possible to run the test onto the optimal processor:
 
 ```shell
-$ numactl -N 0 -l copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
+$ numactl -N 0 -l gdrcopy_copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
 GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
 GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
 GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
@@ -329,7 +365,7 @@ closing gdrdrv
 
 or on the other socket:
 ```shell
-$ numactl -N 1 -l copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
+$ numactl -N 1 -l gdrcopy_copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
 GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
 GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
 GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00

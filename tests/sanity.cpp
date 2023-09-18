@@ -33,7 +33,6 @@
 #include <unistd.h>
 #include <iostream>
 #include <cuda.h>
-#include <cuda_runtime_api.h>
 #include <check.h>
 #include <errno.h>
 #include <sys/queue.h>
@@ -204,7 +203,7 @@ void basic()
     filter_fn();
 
     const size_t _size = 256*1024+16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     print_dbg("buffer size: %zu\n", size);
     CUdeviceptr d_A;
@@ -249,7 +248,7 @@ BEGIN_GDRCOPY_TEST(basic_with_tokens)
     init_cuda(0);
 
     const size_t _size = 256*1024+16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     print_dbg("buffer size: %zu\n", size);
 
@@ -351,7 +350,7 @@ BEGIN_GDRCOPY_TEST(basic_unaligned_mapping)
     print_dbg("Align d_A and try mapping it again.\n");
     // In order to align d_A, we move to the next GPU page. The reason is that
     // the first GPU page may belong to another allocation.
-    CUdeviceptr d_aligned_A = (d_A + GPU_PAGE_SIZE) & GPU_PAGE_MASK;
+    CUdeviceptr d_aligned_A = PAGE_ROUND_UP(d_A, GPU_PAGE_SIZE);
     off_t aligned_A_offset = d_aligned_A - d_A;
     size_t aligned_A_size = A_size - aligned_A_offset;
 
@@ -393,6 +392,74 @@ BEGIN_GDRCOPY_TEST(basic_unaligned_mapping)
 }
 END_GDRCOPY_TEST
 
+/**
+ * This unit test is for catching issue-244
+ * (https://github.com/NVIDIA/gdrcopy/issues/244).  The bug occurs when the
+ * first buffer is smaller than the GPU page size and the second buffer is
+ * within the same page.  We expect to be able to map the first buffer. The
+ * second buffer cannot be mapped because it is not aligned.
+ *
+ * cuMemCreate + cuMemMap always return an aligned address. So, this test is
+ * for cuMemAlloc only.
+ *
+ */
+BEGIN_GDRCOPY_TEST(basic_small_buffers_mapping)
+{
+    expecting_exception_signal = false;
+    MB();
+
+    init_cuda(0);
+
+    const size_t fa_size = GPU_PAGE_SIZE;
+    CUdeviceptr d_fa;
+    gpu_mem_handle_t fa_mhandle;
+    ASSERTDRV(gpu_mem_alloc(&fa_mhandle, fa_size, true, true));
+    d_fa = fa_mhandle.ptr;
+    print_dbg("Allocated d_fa=%#llx, size=%zu\n", d_fa, fa_size);
+
+    const size_t buffer_size = sizeof(uint64_t);
+    CUdeviceptr d_A[2];
+    d_A[0] = d_fa;
+    d_A[1] = d_fa + buffer_size;
+
+    gdr_t g = gdr_open_safe();
+
+    // Pin both buffers.
+    print_dbg("Try pinning d_A[0] and d_A[1].\n");
+    gdr_mh_t A_mh[2];
+    A_mh[0] = null_mh;
+    A_mh[1] = null_mh;
+
+    ASSERT_EQ(gdr_pin_buffer(g, d_A[0], buffer_size, 0, 0, &A_mh[0]), 0);
+    ASSERT_EQ(gdr_pin_buffer(g, d_A[1], buffer_size, 0, 0, &A_mh[1]), 0);
+    ASSERT_NEQ(A_mh[0], null_mh);
+    ASSERT_NEQ(A_mh[1], null_mh);
+
+    void *A_bar_ptr[2];
+    A_bar_ptr[0] = NULL;
+    A_bar_ptr[1] = NULL;
+
+    // Expect gdr_map to pass
+    ASSERT_EQ(gdr_map(g, A_mh[0], &A_bar_ptr[0], buffer_size), 0);
+    print_dbg("Mapping d_A[0] passed as expected.\n");
+
+    // Expect gdr_map to fail due to unaligned mapping
+    ASSERT_NEQ(gdr_map(g, A_mh[1], &A_bar_ptr[1], buffer_size), 0);
+    print_dbg("Mapping d_A[1] failed as expected.\n");
+
+    ASSERT_EQ(gdr_unmap(g, A_mh[0], A_bar_ptr[0], buffer_size), 0);
+
+    ASSERT_EQ(gdr_unpin_buffer(g, A_mh[0]), 0);
+    ASSERT_EQ(gdr_unpin_buffer(g, A_mh[1]), 0);
+
+    ASSERT_EQ(gdr_close(g), 0);
+
+    ASSERTDRV(gpu_mem_free(&fa_mhandle));
+
+    finalize_cuda(0);
+}
+END_GDRCOPY_TEST
+
 template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
 void data_validation()
 {
@@ -403,7 +470,7 @@ void data_validation()
     filter_fn();
 
     const size_t _size = 256*1024+16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     print_dbg("buffer size: %zu\n", size);
     CUdeviceptr d_A;
@@ -414,11 +481,11 @@ void data_validation()
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     ASSERTDRV(cuCtxSynchronize());
 
-    uint32_t *init_buf = new uint32_t[size];
-    uint32_t *copy_buf = new uint32_t[size];
+    uint32_t *init_buf = new uint32_t[size / sizeof(uint32_t)];
+    uint32_t *copy_buf = new uint32_t[size / sizeof(uint32_t)];
 
     init_hbuf_walking_bit(init_buf, size);
-    memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+    memset(copy_buf, 0xA5, size);
 
     gdr_t g = gdr_open_safe();
 
@@ -449,7 +516,7 @@ void data_validation()
     init_hbuf_walking_bit(buf_ptr, size);
     ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
     ASSERT_EQ(compare_buf(init_buf, copy_buf, size), 0);
-    memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+    memset(copy_buf, 0xA5, size);
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     ASSERTDRV(cuCtxSynchronize());
 
@@ -457,7 +524,7 @@ void data_validation()
     gdr_copy_to_mapping(mh, buf_ptr, init_buf, size);
     ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
     ASSERT_EQ(compare_buf(init_buf, copy_buf, size), 0);
-    memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+    memset(copy_buf, 0xA5, size);
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     ASSERTDRV(cuCtxSynchronize());
 
@@ -465,25 +532,70 @@ void data_validation()
     gdr_copy_to_mapping(mh, buf_ptr, init_buf, size);
     gdr_copy_from_mapping(mh, copy_buf, buf_ptr, size);
     ASSERT_EQ(compare_buf(init_buf, copy_buf, size), 0);
-    memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+    memset(copy_buf, 0xA5, size);
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     ASSERTDRV(cuCtxSynchronize());
 
-    int extra_dwords = 5;
-    int extra_off = extra_dwords * sizeof(uint32_t);
-    print_dbg("check 4: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset\n", extra_dwords);
-    gdr_copy_to_mapping(mh, buf_ptr + extra_dwords, init_buf, size - extra_off);
-    gdr_copy_from_mapping(mh, copy_buf, buf_ptr + extra_dwords, size - extra_off);
-    ASSERT_EQ(compare_buf(init_buf, copy_buf, size - extra_off), 0);
-    memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
-    ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
-    ASSERTDRV(cuCtxSynchronize());
+    int offset_array[] = { 1, 2, 3, 4, 5, 6, 7, 11, 129, 1023 };
 
-    extra_off = 11;
-    print_dbg("check 5: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset\n", extra_off);
-    gdr_copy_to_mapping(mh, (char*)buf_ptr + extra_off, init_buf, size - extra_off);
-    gdr_copy_from_mapping(mh, copy_buf, (char*)buf_ptr + extra_off, size - extra_off);
-    ASSERT_EQ(compare_buf(init_buf, copy_buf, size - extra_off), 0);
+    for (int i = 0; i < sizeof(offset_array) / sizeof(offset_array[0]); ++i) {
+        int extra_dwords = offset_array[i];
+        int extra_off = extra_dwords * sizeof(uint32_t);
+        print_dbg("check 4.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset on mapping\n", i, extra_dwords);
+        gdr_copy_to_mapping(mh, buf_ptr + extra_dwords, init_buf, size - extra_off);
+        gdr_copy_from_mapping(mh, copy_buf, buf_ptr + extra_dwords, size - extra_off);
+        ASSERT_EQ(compare_buf(init_buf, copy_buf, size - extra_off), 0);
+        memset(copy_buf, 0xA5, size);
+        ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
+        ASSERTDRV(cuCtxSynchronize());
+
+        extra_off = offset_array[i];
+        print_dbg("check 5.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset on mapping\n", i, extra_off);
+        gdr_copy_to_mapping(mh, (char*)buf_ptr + extra_off, init_buf, size - extra_off);
+        gdr_copy_from_mapping(mh, copy_buf, (char*)buf_ptr + extra_off, size - extra_off);
+        ASSERT_EQ(compare_buf(init_buf, copy_buf, size - extra_off), 0);
+        memset(copy_buf, 0xA5, size);
+        ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
+        ASSERTDRV(cuCtxSynchronize());
+
+        extra_dwords = offset_array[i];
+        extra_off = extra_dwords * sizeof(uint32_t);
+        print_dbg("check 6.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset on host buffer\n", i, extra_dwords);
+        gdr_copy_to_mapping(mh, buf_ptr, init_buf + extra_dwords, size - extra_off);
+        gdr_copy_from_mapping(mh, copy_buf + extra_dwords, buf_ptr, size - extra_off);
+        ASSERT_EQ(compare_buf(init_buf + extra_dwords, copy_buf + extra_dwords, size - extra_off), 0);
+        memset(copy_buf, 0xA5, size);
+        ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
+        ASSERTDRV(cuCtxSynchronize());
+
+        extra_off = offset_array[i];
+        print_dbg("check 7.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset on host buffer\n", i, extra_off);
+        gdr_copy_to_mapping(mh, buf_ptr, (char *)init_buf + extra_off, size - extra_off);
+        gdr_copy_from_mapping(mh, (char *)copy_buf + extra_off, buf_ptr, size - extra_off);
+        ASSERT_EQ(compare_buf((uint32_t *)((uintptr_t)init_buf + extra_off), (uint32_t *)((uintptr_t)copy_buf + extra_off), size - extra_off), 0);
+        memset(copy_buf, 0xA5, size);
+        ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
+        ASSERTDRV(cuCtxSynchronize());
+
+        extra_dwords = offset_array[i];
+        extra_off = extra_dwords * sizeof(uint32_t);
+        print_dbg("check 8.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset on both mapping and host buffer\n", i, extra_dwords);
+        gdr_copy_to_mapping(mh, buf_ptr + extra_dwords, init_buf + extra_dwords, size - extra_off);
+        gdr_copy_from_mapping(mh, copy_buf + extra_dwords, buf_ptr + extra_dwords, size - extra_off);
+        ASSERT_EQ(compare_buf(init_buf + extra_dwords, copy_buf + extra_dwords, size - extra_off), 0);
+        memset(copy_buf, 0xA5, size);
+        ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
+        ASSERTDRV(cuCtxSynchronize());
+
+        extra_off = offset_array[i];
+        print_dbg("check 9.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset on both mapping and host buffer\n", i, extra_off);
+        gdr_copy_to_mapping(mh, (char *)buf_ptr + extra_off, (char *)init_buf + extra_off, size - extra_off);
+        gdr_copy_from_mapping(mh, (char *)copy_buf + extra_off, (char *)buf_ptr + extra_off, size - extra_off);
+        ASSERT_EQ(compare_buf((uint32_t *)((uintptr_t)init_buf + extra_off), (uint32_t *)((uintptr_t)copy_buf + extra_off), size - extra_off), 0);
+        memset(copy_buf, 0xA5, size);
+        ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
+        ASSERTDRV(cuCtxSynchronize());
+    }
 
     print_dbg("unmapping\n");
     ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
@@ -491,8 +603,19 @@ void data_validation()
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
 
     ASSERT_EQ(gdr_close(g), 0);
+    if (copy_buf) {
+        delete [] copy_buf;
+        copy_buf = NULL;
+    }
+    if (init_buf) {
+        delete [] init_buf;
+        init_buf = NULL;
+    }
 
     ASSERTDRV(gfree_fn(&mhandle));
+
+    delete init_buf;
+    delete copy_buf;
 
     finalize_cuda(0);
 }
@@ -534,7 +657,7 @@ void invalidation_access_after_gdr_close()
     srand(time(NULL));
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     int mydata = (rand() % 1000) + 1;
 
@@ -626,7 +749,7 @@ void invalidation_access_after_free()
     srand(time(NULL));
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     int mydata = (rand() % 1000) + 1;
 
@@ -719,7 +842,7 @@ void invalidation_two_mappings()
     srand(time(NULL));
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     int mydata = (rand() % 1000) + 1;
 
@@ -838,7 +961,7 @@ void invalidation_fork_access_after_free()
     srand(time(NULL));
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
     const char *myname;
 
     fflush(stdout);
@@ -1009,7 +1132,7 @@ void invalidation_fork_after_gdr_map()
     ASSERT_NEQ(pipe(filedes_1), -1);
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
     const char *myname;
 
     init_cuda(0);
@@ -1165,7 +1288,7 @@ void invalidation_fork_child_gdr_map_parent()
     MB();
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
     const char *myname;
 
     init_cuda(0);
@@ -1265,7 +1388,7 @@ void invalidation_fork_map_and_free()
     srand(time(NULL));
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
     const char *myname;
 
     fflush(stdout);
@@ -1405,7 +1528,7 @@ void invalidation_unix_sock_shared_fd_gdr_pin_buffer()
     int fd = -1;
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     ASSERT_EQ(socketpair(PF_UNIX, SOCK_DGRAM, 0, pair), 0);
 
@@ -1520,7 +1643,7 @@ void invalidation_unix_sock_shared_fd_gdr_map()
     int fd = -1;
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     ASSERT_EQ(socketpair(PF_UNIX, SOCK_DGRAM, 0, pair), 0);
 
@@ -1663,7 +1786,7 @@ BEGIN_GDRCOPY_TEST(invalidation_fork_child_gdr_pin_parent_with_tokens)
     ASSERT_NEQ(pipe(filedes_1), -1);
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
     const char *myname;
 
     fflush(stdout);
@@ -1799,7 +1922,7 @@ void basic_child_thread_pins_buffer()
     const size_t _size = GPU_PAGE_SIZE * 16;
     mt_test_info t;
     memset(&t, 0, sizeof(mt_test_info));
-    t.size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    t.size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     init_cuda(0);
     filter_fn();
@@ -1904,6 +2027,7 @@ int main(int argc, char *argv[])
     tcase_add_test(tc_basic, basic_cumemalloc);
     tcase_add_test(tc_basic, basic_with_tokens);
     tcase_add_test(tc_basic, basic_unaligned_mapping);
+    tcase_add_test(tc_basic, basic_small_buffers_mapping);
     tcase_add_test(tc_basic, basic_child_thread_pins_buffer_cumemalloc);
 
     tcase_add_test(tc_data_validation, data_validation_cumemalloc);

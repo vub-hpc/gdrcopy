@@ -74,6 +74,10 @@ done
 
 shift $((OPTIND-1))
 
+NVCC=${CUDA}/bin/nvcc
+CUDA_VERSION=`$NVCC --version | grep release | sed 's/^.*release \([0-9]\+\.[0-9]\+\).*/\1/'`
+CUDA_MAJOR=`echo ${CUDA_VERSION} | cut -d "." -f 1`
+CUDA_MINOR=`echo ${CUDA_VERSION} | cut -d "." -f 2`
 
 if [ "X$CUDA" == "X" ]; then
     echo "CUDA environment variable is not defined"
@@ -97,7 +101,7 @@ FULL_VERSION="${VERSION}"
 
 if [[ ${generate_kmod} == 1 ]]; then
     if [ -z "${NVIDIA_SRC_DIR}" ]; then
-        NVIDIA_SRC_DIR=$(find /usr/src/nvidia-* -name "nv-p2p.h" -print -quit)
+	NVIDIA_SRC_DIR=$(find /usr/src/kernel-modules/nvidia-* /usr/src/nvidia-* -name "nv-p2p.h" -print -quit 2>/dev/null)
         if [ ${#NVIDIA_SRC_DIR} -gt 0 ]; then
             NVIDIA_SRC_DIR=$(dirname ${NVIDIA_SRC_DIR})
         fi
@@ -158,15 +162,22 @@ if [ -f "/etc/redhat-release" ]; then
     release_version=".el$(cat /etc/redhat-release | grep -o -E '[0-9]+' | head -1)"
 elif [ -f "/etc/centos-release" ]; then
     release_version=".el$(cat /etc/centos-release | grep -o -E '[0-9]+' | head -1)"
+elif [ -f "/etc/os-release" ]; then
+    release_version=$(source /etc/os-release && echo ".$ID-$VERSION_ID")
 else
     release_version="unknown_distro"
 fi
 echo $srpm $rpms
 ex cd ${CWD}
 for item in `ls $tmpdir/topdir/SRPMS/*.rpm $tmpdir/topdir/RPMS/*/*.rpm`; do
-    item_name=`basename $item`
-    item_name=`echo $item_name | sed -e "s/\.rpm//g"`
-    item_name="${item_name}${release_version}.rpm"
+    item_name=`basename $item .rpm`
+    arch=$(sed -ne 's/.*\(\.[^\.]\+\)$/\1/p' <<< $item_name)
+    item_name=`basename $item_name $arch`
+    if [ "$item_name" == "gdrcopy-${FULL_VERSION}-${RPM_VERSION}.`uname -m`" ]; then
+        item_name="${item_name}${release_version}+cuda${CUDA_MAJOR}.${CUDA_MINOR}.${arch}.rpm"
+    else
+        item_name="${item_name}${release_version}${arch}.rpm"
+    fi
     ex cp $item ./${item_name}
 done
 

@@ -28,8 +28,6 @@
 #include <cuda.h>
 #include "common.hpp"
 
-#define ROUND_UP(x, n)     (((x) + ((n) - 1)) & ~((n) - 1))
-
 namespace gdrcopy {
     namespace test {
         bool print_dbg_msg = false;
@@ -41,6 +39,7 @@ namespace gdrcopy {
                 va_list ap;
                 va_start(ap, fmt);
                 vfprintf(stderr, fmt, ap);
+                va_end(ap);
             }
         }
 
@@ -69,7 +68,7 @@ namespace gdrcopy {
             }
 
             if (aligned_mapping)
-                out_ptr = ROUND_UP(ptr, GPU_PAGE_SIZE);
+                out_ptr = PAGE_ROUND_UP(ptr, GPU_PAGE_SIZE);
             else
                 out_ptr = ptr;
 
@@ -158,9 +157,9 @@ namespace gdrcopy {
             }
 
             // In case gran is smaller than GPU_PAGE_SIZE
-            granularity = ROUND_UP(gran, GPU_PAGE_SIZE);
+            granularity = PAGE_ROUND_UP(gran, GPU_PAGE_SIZE);
 
-            rounded_size = ROUND_UP(size, granularity);
+            rounded_size = PAGE_ROUND_UP(size, granularity);
             ret = cuMemAddressReserve(&ptr, rounded_size, granularity, 0, 0);
             if (ret != CUDA_SUCCESS) {
                 print_dbg("error in cuMemAddressReserve\n");
